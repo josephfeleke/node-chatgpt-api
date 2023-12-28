@@ -352,6 +352,25 @@ ${botMessage.message}
 
         let reply = '';
         let result = null;
+         // Check if the user wants to use the Replicate model
+    if (opts.useReplicateModel) {
+        const replicateClient = new ReplicateClient(this.apiKey);
+        const replicateResponse = await replicateClient.getResponse(
+            'kcaverly/dolphin-2.5-mixtral-8x7b-gguf:680c63b2efc0045c96a20cdedb30a86b9b5c60101ba6ef9ba8c40860d52b304b',
+            {
+                input: {
+                    prompt: payload, // Use the built prompt including the conversation context
+                     temperature: 0.7,
+      system_prompt:opts.promptPrefix,
+                    max_new_tokens: -1,
+      repeat_penalty: 1.1,
+      prompt_template: "system\n{system_prompt}\nuser\n{prompt}\nassistant"
+                    // other parameters like temperature, max_new_tokens, etc.
+                }
+            }
+        );
+        reply = replicateResponse; // Use the response from Replicate
+    } else {
         if (typeof opts.onProgress === 'function') {
             await this.getCompletion(
                 payload,
@@ -390,6 +409,7 @@ ${botMessage.message}
                 reply = result.choices[0].text.replace(this.endToken, '');
             }
         }
+    }
 
         // avoids some rendering issues when using the CLI app
         if (this.options.debug) {
