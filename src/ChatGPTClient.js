@@ -4,6 +4,7 @@ import Keyv from 'keyv';
 import { encoding_for_model as encodingForModel, get_encoding as getEncoding } from '@dqbd/tiktoken';
 import { fetchEventSource } from '@waylaidwanderer/fetch-event-source';
 import { Agent, ProxyAgent } from 'undici';
+import ReplicateClient from 'replicate';
 
 const CHATGPT_MODEL = 'gpt-3.5-turbo';
 
@@ -159,6 +160,7 @@ export default class ChatGPTClient {
             console.debug(modelOptions);
             console.debug();
         }
+        console.log(JSON.stringify(modelOptions));
         const opts = {
             method: 'POST',
             headers: {
@@ -170,6 +172,7 @@ export default class ChatGPTClient {
                 headersTimeout: 0,
             }),
         };
+
 
         if (this.apiKey && this.options.azure && this.options.reverseProxyUrl) {
             opts.headers['api-key'] = this.apiKey;
@@ -346,6 +349,9 @@ ${botMessage.message}
             },
         );
 
+        console.log(payload);
+        console.log(context);
+
         if (this.options.keepNecessaryMessagesOnly) {
             conversation.messages = context;
         }
@@ -353,23 +359,51 @@ ${botMessage.message}
         let reply = '';
         let result = null;
          // Check if the user wants to use the Replicate model
+         console.log(payload[1].content.split('\n')
+         .map(line => line.replace(/^\|\|>[^:]*:\s*/, ''))
+         .join('\n'))
+
+         console.log(opts.promptPrefix)
     if (opts.useReplicateModel) {
-        const replicateClient = new ReplicateClient(this.apiKey);
-        const replicateResponse = await replicateClient.getResponse(
+        const replicateClient = new ReplicateClient({auth:this.apiKey});
+
+        // let prediction = await replicateClient.deployments.predictions.create(
+        //     "josephfeleke",
+        //     "dolphin-mixtral",
+        //     {
+        //         input: {
+        //             prompt: payload[1].content,
+        //             temperature: 0.7,
+        //             system_prompt: opts.promptPrefix,
+        //             max_new_tokens: -1,
+        //             repeat_penalty: 1.1,
+        //             prompt_template: "<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant"
+        //           }
+        //     }
+        //   );
+        //   prediction = await replicateClient.wait(prediction);
+        // reply = prediction.output.join('') // Join all array elements with a space.
+        // .replace(/\s([,!.?'])/g, '$1');
+        // console.log("replicate response:")
+        // console.log(reply) // Use the response from Replicate
+
+        const replicateResponse = await replicateClient.run(
             'kcaverly/dolphin-2.5-mixtral-8x7b-gguf:680c63b2efc0045c96a20cdedb30a86b9b5c60101ba6ef9ba8c40860d52b304b',
             {
                 input: {
-                    prompt: payload, // Use the built prompt including the conversation context
-                     temperature: 0.7,
-      system_prompt:opts.promptPrefix,
+                    prompt: payload[1].content,
+                    temperature: 0.7,
+                    system_prompt: opts.promptPrefix,
                     max_new_tokens: -1,
-      repeat_penalty: 1.1,
-      prompt_template: "system\n{system_prompt}\nuser\n{prompt}\nassistant"
-                    // other parameters like temperature, max_new_tokens, etc.
-                }
+                    repeat_penalty: 1.3,
+                    prompt_template: "<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant"
+                  }
             }
         );
-        reply = replicateResponse; // Use the response from Replicate
+        reply = replicateResponse.join('') // Join all array elements with a space.
+        .replace(/\s([,!.?'])/g, '$1');
+        console.log("replicate response:")
+        console.log(reply) // Use the response from Replicate
     } else {
         if (typeof opts.onProgress === 'function') {
             await this.getCompletion(
